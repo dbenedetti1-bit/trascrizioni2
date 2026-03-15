@@ -61,11 +61,12 @@ def extract_audio_from_video(video_path: Path) -> Path:
         raise
 
 
-def transcribe_media(media_path: Path) -> str:
+def transcribe_media(media_path: Path, transcript_save_path: Path | None = None) -> str:
     """
     Trascrive un file audio o video con faster-whisper.
     - Se è video: estrae prima l'audio con moviepy.
     - Usa device="cuda" e compute_type="float16" quando disponibile.
+    - Se transcript_save_path è fornito, salva il testo su file prima di restituire (così non si perde in caso di errore dopo).
     """
     media_path = Path(media_path).resolve()
     suffix = media_path.suffix.lower()
@@ -98,7 +99,7 @@ def transcribe_media(media_path: Path) -> str:
                 while duration_sec > 0 and s.end >= last_milestone + PROGRESS_INTERVAL_SEC:
                     last_milestone += PROGRESS_INTERVAL_SEC
                     remaining = max(0, duration_sec - last_milestone)
-                    print(f"  Trascrizione: {_format_duration(last_milestone)} / {total_str} — rimanenti ~{_format_duration(remaining)}")
+                    print(f"  Trascrizione: {_format_duration(last_milestone)} / {total_str} — rimanenti ~{_format_duration(remaining)}", flush=True)
             return " ".join(parts).strip()
 
         # Prova prima con GPU; se fallisce (es. cublas64_12.dll mancante) usa CPU
@@ -116,8 +117,19 @@ def transcribe_media(media_path: Path) -> str:
             model = WhisperModel("base", device="cpu", compute_type="int8")
             text = run_transcription(model)
         if duration_sec > 0:
-            print(f"  Trascrizione completata: {total_str} di audio.")
+            print(f"  Trascrizione completata: {total_str} di audio.", flush=True)
+        # Salva subito la trascrizione su file (prima del return) così non si perde mai
+        if transcript_save_path and text:
+            try:
+                transcript_save_path.write_text(text, encoding="utf-8")
+                print(f"  Trascrizione salvata: {transcript_save_path}", flush=True)
+            except Exception as e:
+                print(f"  Attenzione: impossibile salvare trascrizione su file: {e}", flush=True)
         return text
     finally:
+        # Non far mai propagare errori dalla pulizia: altrimenti si perde il valore di return
         if temp_audio_path and temp_audio_path.exists():
-            temp_audio_path.unlink(missing_ok=True)
+            try:
+                temp_audio_path.unlink(missing_ok=True)
+            except Exception:
+                pass

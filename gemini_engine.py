@@ -39,7 +39,7 @@ def process_with_gemini(raw_text: str) -> dict | None:
         raise RuntimeError("Il file prompts.txt è vuoto o mancante. Inserisci il System Prompt.")
 
     model = genai.GenerativeModel(
-        "gemini-1.5-flash",
+        "gemini-2.5-flash",
         system_instruction=system_prompt,
     )
 

@@ -7,9 +7,11 @@ import os
 import sys
 from pathlib import Path
 
-# Carica variabili da .env (GEMINI_API_KEY) prima di importare gli altri moduli
+# Carica variabili da .env o gemini.env (GEMINI_API_KEY) prima di importare gli altri moduli
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).resolve().parent / ".env")
+_project_dir = Path(__file__).resolve().parent
+load_dotenv(_project_dir / ".env")
+load_dotenv(_project_dir / "gemini.env")  # supporto anche gemini.env
 
 from transcriber import transcribe_media
 from gemini_engine import process_with_gemini
@@ -79,21 +81,41 @@ def run_workflow(input_path: Path) -> None:
             return
         print(f"  Testo estratto ({len(raw_text)} caratteri).")
     else:
-        print("  Trascrizione audio/video in corso...")
-        raw_text = transcribe_media(input_path)
+        print("  Trascrizione audio/video in corso...", flush=True)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        try:
+            # Passiamo il path: la trascrizione viene salvata dentro transcribe_media prima del return
+            raw_text = transcribe_media(input_path, transcript_save_path=transcript_path)
+        except Exception as e:
+            print(f"  Errore durante la trascrizione: {e}", flush=True)
+            raise
+        sys.stdout.flush()
+        sys.stderr.flush()
         if not raw_text or not raw_text.strip():
-            print("  Errore: trascrizione vuota. Verifica il file.")
+            print("  Errore: trascrizione vuota. Verifica il file.", flush=True)
             return
-        print(f"  Trascrizione completata ({len(raw_text)} caratteri).")
-        print("  Creazione file trascrizione...")
-        transcript_path.write_text(raw_text, encoding="utf-8")
-        print(f"  Trascrizione salvata: {transcript_path}")
+        print(f"  Trascrizione completata ({len(raw_text)} caratteri).", flush=True)
+        # Se il trascriber ha già salvato, non riscrivere
+        if not transcript_path.exists():
+            try:
+                transcript_path.write_text(raw_text, encoding="utf-8")
+                print(f"  Trascrizione salvata: {transcript_path}", flush=True)
+            except Exception as e:
+                print(f"  Attenzione: impossibile salvare la trascrizione su file: {e}", flush=True)
+        sys.stdout.flush()
 
     print("\n" + "=" * 50)
     print("  Step 2/4: Elaborazione con Gemini")
     print("=" * 50)
-    print("  Invio testo a Gemini per strutturazione e riordino...")
-    structured_content = process_with_gemini(raw_text)
+    print("  Invio testo a Gemini per strutturazione e riordino...", flush=True)
+    sys.stdout.flush()
+    try:
+        structured_content = process_with_gemini(raw_text)
+    except Exception as e:
+        print(f"  Errore Gemini: {e}")
+        print("  La trascrizione è stata salvata; puoi riprovare dopo o usare il file .txt.")
+        raise
     if not structured_content:
         print("  Errore: nessun contenuto restituito da Gemini.")
         return
@@ -103,8 +125,12 @@ def run_workflow(input_path: Path) -> None:
     print("  Step 3/4: Generazione documento Word")
     print("=" * 50)
     print("  Creazione dispensa (titolo, introduzione, indice, capitoli)...")
-    build_document(structured_content, output_path)
-    print(f"  Dispensa salvata: {output_path}")
+    try:
+        build_document(structured_content, output_path)
+        print(f"  Dispensa salvata: {output_path}")
+    except Exception as e:
+        print(f"  Errore creazione Word: {e}")
+        raise
 
     print("\n" + "=" * 50)
     print("  Step 4/4: Completato")
@@ -118,7 +144,16 @@ def run_workflow(input_path: Path) -> None:
 
 def main() -> None:
     input_path = get_input_file()
-    run_workflow(input_path)
+    try:
+        run_workflow(input_path)
+    except Exception as e:
+        print("\n  ! Errore durante l'esecuzione:", flush=True)
+        print(f"  {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        sys.exit(1)
 
 
 if __name__ == "__main__":

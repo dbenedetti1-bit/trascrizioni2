@@ -1,0 +1,7 @@
+faster-whisper
+moviepy
+google-generativeai
+python-docx
+pypdf
+python-dotenv
+mutagen

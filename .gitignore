@@ -1,0 +1,37 @@
+# Ambiente virtuale
+venv/
+.venv/
+env/
+
+# Chiavi e segreti
+.env
+.env.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+eggs/
+*.egg-info/
+*.egg
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Output generati (opzionale: rimuovi se vuoi tracciare le dispense)
+*_dispensa.docx
+
+# File temporanei
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db

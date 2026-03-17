@@ -18,7 +18,7 @@ from gemini_engine import process_with_gemini
 from doc_builder import build_document
 
 
-SUPPORTED_EXTENSIONS = {".mp4", ".mkv", ".mp3", ".wav", ".txt", ".pdf"}
+SUPPORTED_EXTENSIONS = {".mp4", ".mkv", ".mp3", ".wav", ".txt", ".pdf", ".docx"}
 
 
 def get_input_file() -> Path:
@@ -26,7 +26,7 @@ def get_input_file() -> Path:
     print("=" * 60)
     print("  Lezioni → Dispense Word")
     print("=" * 60)
-    print("\nFormati supportati: video (.mp4, .mkv), audio (.mp3, .wav), testo (.txt), PDF (.pdf)\n")
+    print("\nFormati supportati: video (.mp4, .mkv), audio (.mp3, .wav), testo (.txt), PDF (.pdf), Word (.docx)\n")
 
     while True:
         path_str = input("Inserisci il percorso del file di partenza: ").strip().strip('"')
@@ -47,7 +47,7 @@ def get_input_file() -> Path:
 
 
 def get_text_from_file(path: Path) -> str:
-    """Legge il testo da file .txt o .pdf (senza trascrizione)."""
+    """Legge il testo da file .txt, .pdf o .docx (senza trascrizione)."""
     suffix = path.suffix.lower()
     if suffix == ".txt":
         return path.read_text(encoding="utf-8", errors="replace")
@@ -59,6 +59,30 @@ def get_text_from_file(path: Path) -> str:
         except ImportError:
             print("Per i PDF installa: pip install pypdf")
             sys.exit(1)
+    if suffix == ".docx":
+        try:
+            from docx import Document
+        except ImportError:
+            print("Per i file Word installa: pip install python-docx")
+            sys.exit(1)
+
+        doc = Document(str(path))
+
+        parts: list[str] = []
+        for p in doc.paragraphs:
+            t = (p.text or "").strip()
+            if t:
+                parts.append(t)
+
+        # Include anche testo in tabelle (alcune esportazioni lo usano)
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    t = (cell.text or "").strip()
+                    if t:
+                        parts.append(t)
+
+        return "\n".join(parts)
     return ""
 
 
@@ -73,7 +97,7 @@ def run_workflow(input_path: Path) -> None:
     print(f"  File: {input_path.name}")
 
     # Testo: da file; Media: da trascrizione
-    if input_path.suffix.lower() in {".txt", ".pdf"}:
+    if input_path.suffix.lower() in {".txt", ".pdf", ".docx"}:
         print("  Lettura testo da file...")
         raw_text = get_text_from_file(input_path)
         if not raw_text.strip():

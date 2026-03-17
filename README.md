@@ -51,7 +51,7 @@ Tool modulare in Python per trasformare lezioni universitarie (video, audio o te
 2. Quando richiesto, inserisci il **percorso completo** del file di partenza:
    - **Video**: `.mp4`, `.mkv` → viene estratto l’audio e poi trascritto
    - **Audio**: `.mp3`, `.wav` → trascrizione diretta
-   - **Testo/PDF**: `.txt`, `.pdf` → nessuna trascrizione, il testo viene inviato a Gemini
+   - **Testo/PDF/Word**: `.txt`, `.pdf`, `.docx` → nessuna trascrizione, il testo viene inviato a Gemini
 
 3. Il flusso esegue in automatico:
    - Trascrizione (se media) con faster-whisper

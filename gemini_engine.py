@@ -7,34 +7,6 @@ import os
 from pathlib import Path
 
 PROMPTS_PATH = Path(__file__).resolve().parent / "prompts.txt"
-_DEBUG_LOG_PATH = Path(__file__).resolve().parent / "debug-316c26.log"
-
-
-def _ndjson_debug_log(
-    hypothesis_id: str,
-    location: str,
-    message: str,
-    data: dict | None = None,
-    run_id: str = "pre-fix",
-) -> None:
-    """Scrive una riga NDJSON nel file di log debug (no contenuti testuali sensibili)."""
-    import json as _json
-    import time as _time
-
-    payload = {
-        "sessionId": "316c26",
-        "runId": run_id,
-        "hypothesisId": hypothesis_id,
-        "location": location,
-        "message": message,
-        "data": data or {},
-        "timestamp": int(_time.time() * 1000),
-    }
-    try:
-        with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(_json.dumps(payload, ensure_ascii=False) + "\n")
-    except Exception:
-        return
 
 
 def _load_system_prompt() -> str:
@@ -110,39 +82,8 @@ def process_with_gemini(raw_text: str) -> dict | None:
             continue
 
         text = response.text.strip()
-        # #region debug_log_response_shape
-        _ndjson_debug_log(
-            hypothesis_id="H1",
-            location="process_with_gemini:response_text",
-            message="shape flags",
-            data={
-                "text_len": len(text),
-                "starts_with_brace": text.lstrip().startswith("{"),
-                "has_title_key": '"title"' in text,
-                "has_introduction_key": '"introduction"' in text,
-                "has_toc_key": '"toc"' in text,
-                "has_chapters_key": '"chapters"' in text,
-            },
-        )
-        # #endregion
         parsed = _parse_structured_response(text)
         if parsed:
-            # #region debug_log_parsed_result
-            _ndjson_debug_log(
-                hypothesis_id="H3",
-                location="process_with_gemini:parsed_ok",
-                message="parsed dict summary",
-                data={
-                    "title_len": len(str(parsed.get("title", "") or "")),
-                    "intro_len": len(str(parsed.get("introduction", "") or "")),
-                    "intro_starts_with_brace": str(parsed.get("introduction", "") or "").lstrip().startswith("{"),
-                    "intro_contains_title_key": '"title"' in str(parsed.get("introduction", "") or ""),
-                    "toc_is_list": isinstance(parsed.get("toc"), list),
-                    "chapters_is_list": isinstance(parsed.get("chapters"), list),
-                    "chapters_count": len(parsed.get("chapters") or []),
-                },
-            )
-            # #endregion
             return parsed
 
         last_error = "Parsing Gemini non riuscito (risposta non strutturata/JSON invalido)."
@@ -158,22 +99,6 @@ def _parse_structured_response(text: str) -> dict | None:
     """
     import json
     import re
-
-    # #region debug_log_parser_start
-    _ndjson_debug_log(
-        hypothesis_id="H2",
-        location="_parse_structured_response:start",
-        message="parser start",
-        data={
-            "text_len": len(text),
-            "starts_with_brace": text.lstrip().startswith("{"),
-            "has_title_key": '"title"' in text,
-            "has_introduction_key": '"introduction"' in text,
-            "has_toc_key": '"toc"' in text,
-            "has_chapters_key": '"chapters"' in text,
-        },
-    )
-    # #endregion
 
     def _strip_code_fences(s: str) -> str:
         # Rimuove eventuali blocchi markdown tipo ```json ... ```
@@ -223,32 +148,8 @@ def _parse_structured_response(text: str) -> dict | None:
     last_brace = s.rfind("}")
     if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
         json_candidate = s[first_brace : last_brace + 1].strip()
-        # #region debug_log_json_candidate_attempt
-        _ndjson_debug_log(
-            hypothesis_id="H1",
-            location="_parse_structured_response:json_candidate_extract",
-            message="json candidate extraction",
-            data={
-                "first_brace_idx": first_brace,
-                "last_brace_idx": last_brace,
-                "candidate_len": len(json_candidate),
-            },
-        )
-        # #endregion
         data = _try_parse_json_candidate(json_candidate)
         if data:
-            # #region debug_log_json_candidate_success
-            _ndjson_debug_log(
-                hypothesis_id="H1",
-                location="_parse_structured_response:json_candidate_success",
-                message="json decoded",
-                data={
-                    "intro_len": len(str(data.get("introduction", "") or "")),
-                    "intro_contains_title_key": '"title"' in str(data.get("introduction", "") or ""),
-                    "chapters_is_list": isinstance(data.get("chapters", None), list),
-                },
-            )
-            # #endregion
             return data
 
     # Fallback: parsing con sezioni
@@ -288,20 +189,6 @@ def _parse_structured_response(text: str) -> dict | None:
             result["title"] = first_line or result["title"]
             if rest:
                 result["introduction"] = rest
-                # #region debug_log_intro_assigned_sections_block
-                _ndjson_debug_log(
-                    hypothesis_id="H2",
-                    location="_parse_structured_response:intro_from_sections_i0",
-                    message="introduction assigned from sections",
-                    data={
-                        "intro_len": len(result.get("introduction", "") or ""),
-                        "intro_starts_with_brace": (result.get("introduction", "") or "").lstrip().startswith("{"),
-                        "intro_contains_title_key": '"title"' in (result.get("introduction", "") or ""),
-                        "intro_contains_chapters_key": '"chapters"' in (result.get("introduction", "") or ""),
-                        "intro_contains_toc_key": '"toc"' in (result.get("introduction", "") or ""),
-                    },
-                )
-                # #endregion
             continue
         if "introduzione" in first_line.lower():
             result["introduction"] = rest
@@ -334,19 +221,5 @@ def _parse_structured_response(text: str) -> dict | None:
             return data
         # Se sembra JSON ma non è decodificabile, segnaliamo errore così
         # `main.py` usa fallback (evita JSON "grezzo" nel Word).
-        # #region debug_log_intro_json_not_decodable
-        _ndjson_debug_log(
-            hypothesis_id="H2",
-            location="_parse_structured_response:final_guard_return_none",
-            message="intro looks-json but not decodable",
-            data={
-                "intro_len": len(try_intro),
-                "intro_starts_with_brace": try_intro.startswith("{"),
-                "intro_has_title_key": '"title"' in try_intro,
-                "intro_has_chapters_key": '"chapters"' in try_intro,
-                "intro_has_toc_key": '"toc"' in try_intro,
-            },
-        )
-        # #endregion
         return None
     return result

@@ -18,7 +18,7 @@ from gemini_engine import process_with_gemini
 from doc_builder import build_document
 
 
-SUPPORTED_EXTENSIONS = {".mp4", ".mkv", ".mp3", ".wav", ".txt", ".pdf", ".docx"}
+SUPPORTED_EXTENSIONS = {".mp4", ".mkv", ".mp3", ".wav", ".m4a", ".txt", ".pdf", ".docx"}
 
 
 def get_input_file() -> Path:
@@ -26,7 +26,7 @@ def get_input_file() -> Path:
     print("=" * 60)
     print("  Lezioni → Dispense Word")
     print("=" * 60)
-    print("\nFormati supportati: video (.mp4, .mkv), audio (.mp3, .wav), testo (.txt), PDF (.pdf), Word (.docx)\n")
+    print("\nFormati supportati: video (.mp4, .mkv), audio (.mp3, .wav, .m4a), testo (.txt), PDF (.pdf), Word (.docx)\n")
 
     while True:
         path_str = input("Inserisci il percorso del file di partenza: ").strip().strip('"')
@@ -90,6 +90,7 @@ def run_workflow(input_path: Path) -> None:
     """Esegue il flusso: trascrizione (se media) → Gemini → Word."""
     transcript_path = input_path.with_name(f"{input_path.stem}_trascrizione.txt")
     output_path = input_path.with_name(f"{input_path.stem}_dispensa.docx")
+    transcript_created = False
 
     print("\n" + "=" * 50)
     print("  Step 1/4: Analisi file di partenza")
@@ -116,6 +117,14 @@ def run_workflow(input_path: Path) -> None:
             raise
         sys.stdout.flush()
         sys.stderr.flush()
+        # Fallback: a volte il trascrittore salva su file ma il valore ritornato può risultare vuoto.
+        if not raw_text or not raw_text.strip():
+            if transcript_path.exists():
+                try:
+                    raw_text = transcript_path.read_text(encoding="utf-8", errors="replace")
+                    print("  Trascrizione letta dal file di output (fallback).", flush=True)
+                except Exception as e:
+                    print(f"  Attenzione: lettura trascrizione da file fallita: {e}", flush=True)
         if not raw_text or not raw_text.strip():
             print("  Errore: trascrizione vuota. Verifica il file.", flush=True)
             return
@@ -127,9 +136,10 @@ def run_workflow(input_path: Path) -> None:
                 print(f"  Trascrizione salvata: {transcript_path}", flush=True)
             except Exception as e:
                 print(f"  Attenzione: impossibile salvare la trascrizione su file: {e}", flush=True)
+        transcript_created = transcript_path.exists()
         sys.stdout.flush()
 
-    print("\n" + "=" * 50)
+    print("\n" + "=" * 50, flush=True)
     print("  Step 2/4: Elaborazione con Gemini")
     print("=" * 50)
     print("  Invio testo a Gemini per strutturazione e riordino...", flush=True)
@@ -139,10 +149,17 @@ def run_workflow(input_path: Path) -> None:
     except Exception as e:
         print(f"  Errore Gemini: {e}")
         print("  La trascrizione è stata salvata; puoi riprovare dopo o usare il file .txt.")
-        raise
+        structured_content = None
+
     if not structured_content:
-        print("  Errore: nessun contenuto restituito da Gemini.")
-        return
+        # Fallback: crea comunque un .docx anche se Gemini fallisce/parsa male.
+        print("  Avviso: Gemini non ha restituito una struttura valida; genero comunque un Word con contenuto grezzo.", flush=True)
+        structured_content = {
+            "title": "Dispensa",
+            "introduction": "",
+            "toc": ["Contenuto"],
+            "chapters": [{"title": "Contenuto", "content": raw_text}],
+        }
     print("  Risposta ricevuta. Struttura pronta per il documento.")
 
     print("\n" + "=" * 50)
@@ -159,7 +176,7 @@ def run_workflow(input_path: Path) -> None:
     print("\n" + "=" * 50)
     print("  Step 4/4: Completato")
     print("=" * 50)
-    if input_path.suffix.lower() not in {".txt", ".pdf"}:
+    if transcript_created:
         print(f"  File creati:")
         print(f"    - Trascrizione: {transcript_path}")
     print(f"    - Dispensa Word: {output_path}")
